@@ -1,0 +1,102 @@
+<Perl>
+  {
+   package My::Test;
+   use strict;
+   use warnings;
+
+   use Apache2::RequestRec ();
+   use Apache2::RequestIO ();
+   use Apache2::Const -compile=>qw/OK/;
+
+   use ModPerl2::Tools;
+
+   sub spawn1 {
+     pipe my ($rd, $wr);
+     my $pid=ModPerl2::Tools::spawn +{keep_fd=>[fileno $wr]},
+                                    sub {warn "TESTTESTTEST\n";print $wr "$$"};
+     close $wr;
+     $_[0]->print("$pid:$$:".readline $rd);
+
+     return Apache2::Const::OK;
+   }
+
+   sub spawn2 {
+     local $^F=1_000_000_000;	# prevent close-on-exec on $wr
+     pipe my ($rd, $wr);
+     my $fd=fileno $wr;
+     my $pid=ModPerl2::Tools::spawn +{keep_fd=>[$fd]},
+	                            qw/perl -e/,
+				    'warn "TESTTESTTEST\n";
+                                     open F, ">&='.$fd.'";
+                                     print F "$$"',
+				    fileno($wr);
+     close $wr;
+     $_[0]->print("$pid:$$:".readline $rd);
+
+     return Apache2::Const::OK;
+   }
+
+   sub data {
+     my $n=$_[0]->args || 1;
+     while($n--) {
+       $_[0]->print(("x"x79)."\n");
+       $_[0]->rflush;
+     }
+     return Apache2::Const::OK;
+   }
+
+   sub fetch1 {
+     $_[0]->print(length $_[0]->fetch_url('/data?'.$_[0]->args));
+     return Apache2::Const::OK;
+   }
+  }
+
+  {
+    package My::Filter;
+    use strict;
+    use warnings;
+
+    use ModPerl2::Tools;
+    use base 'Apache2::Filter';
+
+    sub handler : FilterRequestHandler {
+      my ($f, $bb)=@_;
+      return $f->safe_die(410);
+    }
+  }
+</Perl>
+
+<Location /spawn1>
+  SetHandler modperl
+  PerlResponseHandler My::Test::spawn1
+</Location>
+
+<Location /spawn2>
+  SetHandler modperl
+  PerlResponseHandler My::Test::spawn2
+</Location>
+
+<Location /data>
+  SetHandler modperl
+  PerlResponseHandler My::Test::data
+</Location>
+
+<Location /fetch1>
+  SetHandler modperl
+  PerlResponseHandler My::Test::fetch1
+</Location>
+
+PerlModule ModPerl::Registry
+Alias /perl @DocumentRoot@/perl
+<Location /perl>
+  SetHandler perl-script
+  PerlResponseHandler ModPerl::Registry
+  PerlOptions +ParseHeaders
+  Options +ExecCGI
+</Location>
+
+<Location /filter_die>
+  SetHandler modperl
+  PerlResponseHandler My::Test::data
+  PerlOutputFilterHandler My::Filter::handler
+</Location>

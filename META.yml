@@ -1,0 +1,17 @@
+--- #YAML:1.0
+name:                ModPerl2-Tools
+version:             0.01
+abstract:            a few hopefully useful tools
+license:             ~
+author:              
+    - Torsten Foertsch <torsten.foertsch@gmx.net>
+generated_by:        ExtUtils::MakeMaker version 6.42
+distribution_type:   module
+requires:     
+    Apache2::Const:                0
+    Apache::TestMM:                0
+    ModPerl::MM:                   0
+    Test::More:                    0
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
+    version: 1.3
