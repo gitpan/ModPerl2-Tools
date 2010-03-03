@@ -57,6 +57,16 @@
      $_[0]->print(Dumper($_[0]->fetch_url($_[0]->args)));
      return Apache2::Const::OK;
    }
+
+   sub req_die {
+     $_[0]->safe_die(410);
+     my $n=10;
+     while($n--) {
+       $_[0]->print(("x"x79)."\n");
+       $_[0]->rflush;
+     }
+     return Apache2::Const::OK;
+   }
   }
 
   {
@@ -112,4 +122,9 @@ Alias /perl @DocumentRoot@/perl
   SetHandler modperl
   PerlResponseHandler My::Test::data
   PerlOutputFilterHandler My::Filter::handler
+</Location>
+
+<Location /req_die>
+  SetHandler modperl
+  PerlResponseHandler My::Test::req_die
 </Location>

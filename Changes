@@ -1,3 +1,9 @@
+0.03  Wed Mar  3 19:04:17 CET 2010
+      - reset $r->status_line before calling ap_die()
+      - reimplement Apache2::RequestRec::safe_die without ap_die()
+      - all versions of safe_die() now call ModPerl::Util::exit(0)
+        instead of returning OK.
+
 0.02  Wed Mar  3 14:10:30 CET 2010
       - fetch_url using mod_proxy
       - more documentation	

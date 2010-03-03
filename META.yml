@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                ModPerl2-Tools
-version:             0.02
+version:             0.03
 abstract:            a few hopefully useful tools
 license:             ~
 author:              

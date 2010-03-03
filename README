@@ -92,6 +92,9 @@ DESCRIPTION
 
     The various flavors of "safe_die()" take this into account.
 
+    "safe_die" won't return. Instead it calls
+    "ModPerl::Util::exit(0)|ModPerl::Util/"exit"" which raises an exception.
+
     ModPerl2::Tools::safe_die $status
         This function is designed to be called from registry scripts. It
         uses Apache2::RequestUtil->request to fetch the current request
@@ -104,7 +107,6 @@ DESCRIPTION
         Usage example:
 
          ModPerl2::Tools::safe_die 401;
-         exit 0;
 
     $r->safe_die($status)
     $f->safe_die($status)
@@ -122,7 +124,7 @@ DESCRIPTION
 
          sub handler : FilterRequestHandler {
            my ($f, $bb)=@_;
-           return $f->safe_die(410);
+           $f->safe_die(410);
          }
 
         The filter flavor removes the current filter from the request's

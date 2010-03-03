@@ -10,7 +10,7 @@ no warnings 'uninitialized';
 use Apache2::RequestUtil ();
 use POSIX ();
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 sub close_fd {
     my %save=(2=>1);       # keep STDERR
@@ -97,14 +97,14 @@ sub fetch_url {
     use Apache2::Filter ();
     use Apache2::FilterRec ();
     use Apache2::HookRun ();
+    use ModPerl::Util ();
     use Apache2::Const -compile=>qw/OK/;
 
-    use constant {
-        HTTP_HEADER_FILTER_NAME => 'http_header',
-    };
-
-    sub _safe_die {
+    sub safe_die {
         my ($I, $status)=@_;
+
+        # avoid further invocation
+        $I->remove;
 
         # Check if we still can send an error message or better check if
         # any output has already been sent. If so the HTTP_HEADER filter
@@ -113,22 +113,14 @@ sub fetch_url {
         # httpd-2.2.x/modules/http/http_request.c.
 
         for( my $n=$I->next; $n; $n=$n->next ) {
-            if( $n->frec->name eq HTTP_HEADER_FILTER_NAME ) {
+            if( $n->frec->name eq 'http_header' ) {
+                $I->r->status_line(undef);
                 $I->r->die($status);
-                last;
+                ModPerl::Util::exit 0;
             }
         }
 
-        return Apache2::Const::OK;
-    }
-
-    sub safe_die {
-        my ($I, $status)=@_;
-
-        # avoid further invocation
-        $I->remove;
-
-        return $I->_safe_die($status);
+        ModPerl::Util::exit 0;
     }
 }
 
@@ -150,7 +142,7 @@ sub fetch_url {
         while( my $b=$bb->first ) {
             $eos++ if( $b->is_eos );
             $b->read(my $bdata);
-            push @{$buffer}, $bdata;
+            push @{$buffer}, $bdata if $buffer;
             $b->delete;
         }
 
@@ -182,10 +174,23 @@ sub fetch_url {
     use Apache2::RequestRec ();
     use Apache2::SubRequest ();
     use APR::Table ();
-    use Apache2::Const -compile=>qw/HTTP_OK/;
+    use Apache2::Const -compile=>qw/HTTP_OK OK/;
+    use Apache2::Filter ();
+    use Apache2::FilterRec ();
+    use ModPerl::Util ();
 
     sub safe_die {
-        return $_[0]->output_filters->_safe_die($_[1]);
+        my ($I, $status)=@_;
+
+        for( my $n=$I->output_filters; $n; $n=$n->next ) {
+            if( $n->frec->name eq 'http_header' ) {
+                $I->status($status);
+                $I->status_line(undef);
+                ModPerl::Util::exit 0;
+            }
+        }
+
+        ModPerl::Util::exit 0;
     }
 
     sub fetch_url {
@@ -325,6 +330,10 @@ happens if the HTTP headers are already on the wire. Then it is too late.
 
 The various flavors of C<safe_die()> take this into account.
 
+C<safe_die> won't return. Instead it calls
+C<ModPerl::Util::exit(0)|ModPerl::Util/"exit">
+which raises an exception.
+
 =over 4
 
 =item ModPerl2::Tools::safe_die $status
@@ -340,7 +349,6 @@ must be enabled.
 Usage example:
 
  ModPerl2::Tools::safe_die 401;
- exit 0;
 
 =item $r-E<gt>safe_die($status)
 
@@ -360,7 +368,7 @@ Usage from within a filter:
 
  sub handler : FilterRequestHandler {
    my ($f, $bb)=@_;
-   return $f->safe_die(410);
+   $f->safe_die(410);
  }
 
 The filter flavor removes the current filter from the request's output
