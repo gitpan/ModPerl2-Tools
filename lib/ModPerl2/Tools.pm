@@ -10,7 +10,7 @@ no warnings 'uninitialized';
 use Apache2::RequestUtil ();
 use POSIX ();
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 sub close_fd {
     my %save=(2=>1);       # keep STDERR
@@ -91,7 +91,8 @@ sub fetch_url {
 }
 
 {
-    package Apache2::Filter;
+    package
+        Apache2::Filter;
 
     use Apache2::Filter ();
     use Apache2::FilterRec ();
@@ -132,7 +133,8 @@ sub fetch_url {
 }
 
 {
-    package ModPerl2::Tools::Filter;
+    package
+        ModPerl2::Tools::Filter;
 
     use Apache2::Filter ();
     use APR::Brigade ();
@@ -159,7 +161,8 @@ sub fetch_url {
         my ($f, $bb)=@_;
 
         unless( $f->ctx ) {
-            unless( $f->r->status==Apache2::Const::HTTP_OK ) {
+            unless( $f->r->status==Apache2::Const::HTTP_OK or
+                    $f->r->pnotes->{force_fetch_content} ) {
                 $f->remove;
                 return Apache2::Const::DECLINED;
             }
@@ -173,10 +176,12 @@ sub fetch_url {
 }
 
 {
-    package Apache2::RequestRec;
+    package
+        Apache2::RequestRec;
 
     use Apache2::RequestRec ();
     use Apache2::SubRequest ();
+    use APR::Table ();
     use Apache2::Const -compile=>qw/HTTP_OK/;
 
     sub safe_die {
@@ -187,14 +192,29 @@ sub fetch_url {
         my ($I, $url)=@_;
 
         my $output=[];
-        my $subr=$I->lookup_uri($url);
+        my $proxy;
+        my $subr=$I->lookup_uri(($proxy=$url=~m!^https?://!) ? '/' : $url);
         if( $subr->status==Apache2::Const::HTTP_OK ) {
-            $subr->pnotes->{out}=$output;
+            @{$subr->pnotes}{qw/out force_fetch_content/}=($output,1);
             $subr->add_output_filter
                 (\&ModPerl2::Tools::Filter::fetch_content_filter);
+            if( $proxy ) {
+                $subr->proxyreq(2);
+                $subr->filename("proxy:".$url);
+                $subr->handler('proxy_server');
+            }
             $subr->run;
+            if( wantarray ) {
+                my (%hout);
+                $hout{STATUS}=$subr->status;
+                $hout{STATUSLINE}=$subr->status_line;
+                $subr->headers_out->do(sub {$hout{lc $_[0]}=$_[1]; 1});
+                return (join('', @$output), \%hout);
+            } else {
+                return join('', @$output);
+            }
         }
-        return join('', @$output);
+        return;
     }
 }
 
@@ -355,8 +375,7 @@ in the web server's realm. Apache provides subrequests for this purpose.
 
 The 2 C<fetch_url> variants use a subrequest to fetch the content of another
 document. The document can even be fetched via C<mod_proxy> from another
-server. However, fetching a document directly as with L<LWP> for example
-is not (yet) possible.
+server.
 
 C<ModPerl2::Tools::fetch_url> needs
 
@@ -368,9 +387,97 @@ Usage:
 
  $content=$r->fetch_url('/some/where?else=42');
 
+ ($content, $headers)=
+     $r->fetch_url('http://what.is/the/meaning/of?life=42');
+
+If C<mod_proxy> is available C<fetch_url> can use it to fetch a document
+from another web server. If C<mod_proxy> is configured to allow HTTPS even
+that should work. I haven't tried that yet. Another subtle point,
+C<ProxyErrorOverride> may affect the output in case of an error.
+
+=head3 How does it work?
+
+If the passed URL starts with C<https://> or C<http://> a subrequest for
+the URI C</> is initiated via C<< $r->lookup_uri('/') >>. Before the
+subrequest is run it is changed into a proxy request for the passed URL.
+One precondition for this to work is that there are no access restrictions
+for the URL C</>.
+
+Otherwise it is simply a subrequest for the passed URL.
+
+Then C<ModPerl2::Tools::Filter::fetch_content_filter> is installed
+as output filter for the subrequest. After that the subrequest is run.
+
+The output filter collects all output.
+
+When the request is done its C<< $r->headers_out >> is copied into a
+normal hash and in list context the output string and this hash are returned.
+In scalar context only the string is returned.
+
+HTTP header names are case insensitive. Their names are all converted to
+lower case in the C<$headers> hash. There are 2 hash members in upper case.
+C<STATUS> contains the HTTP status code of the subrequest and C<STATUSLINE>
+the status line.
+
+=head3 Useful functions for similar cases
+
+Note, it is always better to process data one chunk at a time. Try hard
+to do that! Collecting data in memory should only be a last resort.
+
+=over 4
+
+=item ModPerl2::Tools::Filter::read_bb $bucket_brigade, \@buffer
+
+C<read_bb> collects the data of a bucket brigade in the C<@buffer>
+array. If an C<EOS> bucket has been seen it returns true otherwise false.
+
+A simple output filter that collects all data could look like:
+
+ sub filter {
+     my ($f, $bb)=@_;
+
+     my @buffer;
+     do_something(join '', @buffer)
+         if ModPerl2::Tools::Filter::read_bb $bb, \@buffer;
+
+     return Apache2::Const::OK;
+ }
+
+=item ModPerl2::Tools::Filter::fetch_content_filter
+
+This function is a C<FilterRequestHandler>. Is is controlled by 2 elements
+of C<< $r->pnotes >>, C<out> and C<force_fetch_content>. C<out> must be
+an array reference. It is passed to C<read_bb> to collect the output.
+C<force_fetch_content> is a flag. If false the filter does nothing and
+removes itself if the C<< $r->status >> on the first invocation of the
+filter is not C<HTTP_OK>.
+
+Usage:
+
+ my $subr=$r->lookup_uri(...);
+
+ my $output=[];
+ @{$subr->pnotes}{qw/out force_fetch_content/}=($output,1);
+ $subr->add_output_filter
+     (\&ModPerl2::Tools::Filter::fetch_content_filter);
+ $subr->run;
+
+ do_something(join '', @$output)
+
+=back
+
 =head1 EXPORTS
 
 None.
+
+=head1 TODO
+
+=over 4
+
+=item Look at APR to see what it provides to make things easier. For example
+C<apr_proc_create()>
+
+=back
 
 =head1 SEE ALSO
 
@@ -378,7 +485,7 @@ L<http://perl.apache.org>
 
 =head1 AUTHOR
 
-Torsten Förtsch, E<lt>torsten.foertsch@gmx.net<gt>
+Torsten Förtsch, E<lt>torsten.foertsch@gmx.netE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 

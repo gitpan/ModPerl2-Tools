@@ -1,2 +1,6 @@
+0.02  Wed Mar  3 14:10:30 CET 2010
+      - fetch_url using mod_proxy
+      - more documentation	
+
 0.01  Tue Mar  2 21:42:23 CET 2010
       - initial version

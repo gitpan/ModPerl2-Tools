@@ -134,8 +134,7 @@ DESCRIPTION
 
     The 2 "fetch_url" variants use a subrequest to fetch the content of
     another document. The document can even be fetched via "mod_proxy" from
-    another server. However, fetching a document directly as with LWP for
-    example is not (yet) possible.
+    another server.
 
     "ModPerl2::Tools::fetch_url" needs
 
@@ -147,14 +146,90 @@ DESCRIPTION
 
      $content=$r->fetch_url('/some/where?else=42');
 
+     ($content, $headers)=
+         $r->fetch_url('http://what.is/the/meaning/of?life=42');
+
+    If "mod_proxy" is available "fetch_url" can use it to fetch a document
+    from another web server. If "mod_proxy" is configured to allow HTTPS
+    even that should work. I haven't tried that yet. Another subtle point,
+    "ProxyErrorOverride" may affect the output in case of an error.
+
+   How does it work?
+    If the passed URL starts with "https://" or "http://" a subrequest for
+    the URI "/" is initiated via "$r->lookup_uri('/')". Before the
+    subrequest is run it is changed into a proxy request for the passed URL.
+    One precondition for this to work is that there are no access
+    restrictions for the URL "/".
+
+    Otherwise it is simply a subrequest for the passed URL.
+
+    Then "ModPerl2::Tools::Filter::fetch_content_filter" is installed as
+    output filter for the subrequest. After that the subrequest is run.
+
+    The output filter collects all output.
+
+    When the request is done its "$r->headers_out" is copied into a normal
+    hash and in list context the output string and this hash are returned.
+    In scalar context only the string is returned.
+
+    HTTP header names are case insensitive. Their names are all converted to
+    lower case in the $headers hash. There are 2 hash members in upper case.
+    "STATUS" contains the HTTP status code of the subrequest and
+    "STATUSLINE" the status line.
+
+   Useful functions for similar cases
+    Note, it is always better to process data one chunk at a time. Try hard
+    to do that! Collecting data in memory should only be a last resort.
+
+    ModPerl2::Tools::Filter::read_bb $bucket_brigade, \@buffer
+        "read_bb" collects the data of a bucket brigade in the @buffer
+        array. If an "EOS" bucket has been seen it returns true otherwise
+        false.
+
+        A simple output filter that collects all data could look like:
+
+         sub filter {
+             my ($f, $bb)=@_;
+
+             my @buffer;
+             do_something(join '', @buffer)
+                 if ModPerl2::Tools::Filter::read_bb $bb, \@buffer;
+
+             return Apache2::Const::OK;
+         }
+
+    ModPerl2::Tools::Filter::fetch_content_filter
+        This function is a "FilterRequestHandler". Is is controlled by 2
+        elements of "$r->pnotes", "out" and "force_fetch_content". "out"
+        must be an array reference. It is passed to "read_bb" to collect the
+        output. "force_fetch_content" is a flag. If false the filter does
+        nothing and removes itself if the "$r->status" on the first
+        invocation of the filter is not "HTTP_OK".
+
+        Usage:
+
+         my $subr=$r->lookup_uri(...);
+
+         my $output=[];
+         @{$subr->pnotes}{qw/out force_fetch_content/}=($output,1);
+         $subr->add_output_filter
+             (\&ModPerl2::Tools::Filter::fetch_content_filter);
+         $subr->run;
+
+         do_something(join '', @$output)
+
 EXPORTS
     None.
+
+TODO
+    Look at APR to see what it provides to make things easier. For example
+    "apr_proc_create()"
 
 SEE ALSO
     <http://perl.apache.org>
 
 AUTHOR
-    Torsten Förtsch, <torsten.foertsch@gmx.net<gt>
+    Torsten Förtsch, <torsten.foertsch@gmx.net>
 
 COPYRIGHT AND LICENSE
     Copyright (C) 2010 by Torsten Förtsch

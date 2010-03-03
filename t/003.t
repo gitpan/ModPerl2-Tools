@@ -7,7 +7,7 @@ use Test::More;
 use Apache::TestUtil;
 use Apache::TestRequest qw{GET_BODY GET};
 
-#plan tests=>1;
+#plan tests=>3;
 plan 'no_plan';
 
 Apache::TestRequest::user_agent(reset => 1,

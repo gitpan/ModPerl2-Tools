@@ -10,7 +10,7 @@ use Apache::TestUtil qw/t_write_file t_client_log_error_is_expected
 use Apache::TestRequest qw{GET_BODY GET};
 
 #plan 'no_plan';
-plan tests=>11;
+plan tests=>14;
 
 Apache::TestRequest::user_agent(reset => 1,
 				requests_redirectable => 0);
@@ -53,3 +53,23 @@ ok t_cmp $resp, 800, '/fetch1?10';
 
 $resp=GET_BODY('/fetch1?1000');
 ok t_cmp $resp, 80000, '/fetch1?1000';
+
+SKIP: {
+    no warnings qw/uninitialized numeric/;
+    skip <<'XXX', 3 unless $ENV{TEST_PROXY};
+If you want to test URL fetching via mod_proxy set the TEST_PROXY
+environment variable to either 1 or an HTTP-URL that points to an
+image/jpeg document. If you set TEST_PROXY=1 then
+  http://foertsch.name/Regenbogen-ueber-Gaiberg-small.jpg
+is fetched. There is no guarantee that this URL is always available.
+XXX
+    my $url='http://foertsch.name/Regenbogen-ueber-Gaiberg-small.jpg';
+    $url=$ENV{TEST_PROXY} unless $ENV{TEST_PROXY}==1;
+    $resp=GET_BODY('/fetch2?'.$url);
+    my ($VAR1, $VAR2);
+    eval "$resp";
+    cmp_ok length $VAR1, '>', 0, 'got some data';
+    cmp_ok $VAR2->{STATUS}, '==', 200, 'status==200';
+    cmp_ok $VAR2->{'content-type'}, 'eq', 'image/jpeg',
+           'content-type=image/jpeg';
+}
