@@ -6,11 +6,12 @@ use Apache::Test qw{:withtestmore};
 use Test::More;
 use Apache::TestUtil;
 use Apache::TestUtil qw/t_write_file t_client_log_error_is_expected
-                        t_start_error_log_watch t_finish_error_log_watch/;
+                        t_start_error_log_watch t_finish_error_log_watch
+                        t_mkdir t_catfile t_write_file/;
 use Apache::TestRequest qw{GET_BODY GET};
 
 #plan 'no_plan';
-plan tests=>14;
+plan tests=>17;
 
 Apache::TestRequest::user_agent(reset => 1,
 				requests_redirectable => 0);
@@ -72,4 +73,26 @@ XXX
     cmp_ok $VAR2->{STATUS}, '==', 200, 'status==200';
     cmp_ok $VAR2->{'content-type'}, 'eq', 'image/jpeg',
            'content-type=image/jpeg';
+}
+
+t_start_error_log_watch;
+$resp=GET_BODY('/fetch2?/does/not.exist');
+ok !grep(/File does not exist/, t_finish_error_log_watch),
+    'prevent "File does not exist" message in error_log';
+{
+    my ($VAR1, $VAR2);
+    eval "$resp";
+    cmp_ok $VAR2->{STATUS}, '==', 404, 'status==404';
+}
+
+
+SKIP: {
+    skip 'mod_autoindex is needed to perform this test', 1
+        unless need_module 'mod_autoindex.c';
+    my $droot=Apache::Test::vars('documentroot');
+    t_mkdir t_catfile $droot, 'dir';
+    t_write_file t_catfile($droot, 'dir', '1.txt'), '1';
+    t_write_file t_catfile($droot, 'dir', '2.txt'), '2';
+    $resp=GET_BODY('/fetch2?/dir/');
+    like $resp, qr/1\.txt/, 'fetch_url: directory listing';
 }

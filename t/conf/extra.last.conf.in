@@ -128,3 +128,7 @@ Alias /perl @DocumentRoot@/perl
   SetHandler modperl
   PerlResponseHandler My::Test::req_die
 </Location>
+
+<Location /dir>
+    Options +Indexes
+</Location>

@@ -92,8 +92,8 @@ DESCRIPTION
 
     The various flavors of "safe_die()" take this into account.
 
-    "safe_die" won't return. Instead it calls
-    "ModPerl::Util::exit(0)|ModPerl::Util/"exit"" which raises an exception.
+    "safe_die" won't return. Instead it calls ModPerl::Util::exit(0) which
+    raises an exception.
 
     ModPerl2::Tools::safe_die $status
         This function is designed to be called from registry scripts. It
@@ -130,6 +130,14 @@ DESCRIPTION
         The filter flavor removes the current filter from the request's
         output filter chain.
 
+    $r->headers_sent
+        This function checks if the HTTP_HEADER output filter is still
+        present. If so, it returns an empty list, true otherwise.
+
+        The presence of this filter means no output has yet been written to
+        the client. The HTTP status code and header fields can still be
+        modified.
+
   Fetching the content of another document
     Sometimes a handler or a filter needs the content of another document in
     the web server's realm. Apache provides subrequests for this purpose.
@@ -152,9 +160,9 @@ DESCRIPTION
          $r->fetch_url('http://what.is/the/meaning/of?life=42');
 
     If "mod_proxy" is available "fetch_url" can use it to fetch a document
-    from another web server. If "mod_proxy" is configured to allow HTTPS
-    even that should work. I haven't tried that yet. Another subtle point,
-    "ProxyErrorOverride" may affect the output in case of an error.
+    from another web server. If "mod_ssl" is configured to allow proxying
+    SSL (see "SSLProxyEngine") even the "https" scheme works. Another subtle
+    point, "ProxyErrorOverride" may affect the output in case of an error.
 
    How does it work?
     If the passed URL starts with "https://" or "http://" a subrequest for
@@ -231,10 +239,10 @@ SEE ALSO
     <http://perl.apache.org>
 
 AUTHOR
-    Torsten Förtsch, <torsten.foertsch@gmx.net>
+    Torsten FÃ¶rtsch, <torsten.foertsch@gmx.net>
 
 COPYRIGHT AND LICENSE
-    Copyright (C) 2010 by Torsten Förtsch
+    Copyright (C) 2010 by Torsten FÃ¶rtsch
 
     This library is free software; you can redistribute it and/or modify it
     under the same terms as Perl itself.

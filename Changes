@@ -1,3 +1,12 @@
+0.06  Sun Aug 22 20:00:09 CEST 2010
+      - prevent a few "File does not exist" messages
+
+0.05  Wed Apr 14 11:44:22 CEST 2010
+      - $r->headers_sent
+
+0.04  Fri Mar  5 10:19:20 CET 2010
+      - check for existence of mod_proxy.c in fetch_url()
+
 0.03  Wed Mar  3 19:04:17 CET 2010
       - reset $r->status_line before calling ap_die()
       - reimplement Apache2::RequestRec::safe_die without ap_die()

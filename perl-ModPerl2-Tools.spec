@@ -5,7 +5,7 @@ Requires:     perl = %{perl_version} perl(Apache2::RequestRec)
 Requires:     perl(ModPerl::MM) perl(Apache::TestMM)
 Autoreqprov:  on
 Summary:      ModPerl2::Tools
-Version:      0.02
+Version:      0.06
 Release:      1
 Source:       ModPerl2-Tools-%{version}.tar.gz
 BuildRoot:    %{_tmppath}/%{name}-%{version}-build

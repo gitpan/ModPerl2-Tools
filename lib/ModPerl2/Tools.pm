@@ -10,7 +10,7 @@ no warnings 'uninitialized';
 use Apache2::RequestUtil ();
 use POSIX ();
 
-our $VERSION = '0.03';
+our $VERSION = '0.06';
 
 sub close_fd {
     my %save=(2=>1);       # keep STDERR
@@ -106,18 +106,9 @@ sub fetch_url {
         # avoid further invocation
         $I->remove;
 
-        # Check if we still can send an error message or better check if
-        # any output has already been sent. If so the HTTP_HEADER filter
-        # is missing in the output chain. If it is still present we can
-        # send a normal error message, see ap_die() in
-        # httpd-2.2.x/modules/http/http_request.c.
-
-        for( my $n=$I->next; $n; $n=$n->next ) {
-            if( $n->frec->name eq 'http_header' ) {
-                $I->r->status_line(undef);
-                $I->r->die($status);
-                ModPerl::Util::exit 0;
-            }
+        unless( $I->r->headers_sent ) {
+            $I->r->status_line(undef);
+            $I->r->die($status);
         }
 
         ModPerl::Util::exit 0;
@@ -174,32 +165,58 @@ sub fetch_url {
     use Apache2::RequestRec ();
     use Apache2::SubRequest ();
     use APR::Table ();
-    use Apache2::Const -compile=>qw/HTTP_OK OK/;
+    use APR::Finfo ();
+    use APR::Const -compile=>qw/FILETYPE_REG/;
+    use Apache2::Const -compile=>qw/HTTP_OK OK HTTP_NOT_FOUND/;
     use Apache2::Filter ();
     use Apache2::FilterRec ();
+    use Apache2::Module ();
     use ModPerl::Util ();
+
+    sub headers_sent {
+        my ($I)=@_;
+
+        # Check if any output has already been sent. If so the HTTP_HEADER
+        # filter is missing in the output chain. If it is still present we
+        # can send a normal error message or modify headers, see ap_die()
+        # in httpd-2.2.x/modules/http/http_request.c.
+
+        for( my $n=$I->output_filters; $n; $n=$n->next ) {
+            return if $n->frec->name eq 'http_header';
+        }
+
+        # http_header filter missing -- that means headers are sent
+        return 1;
+    }
 
     sub safe_die {
         my ($I, $status)=@_;
 
-        for( my $n=$I->output_filters; $n; $n=$n->next ) {
-            if( $n->frec->name eq 'http_header' ) {
-                $I->status($status);
-                $I->status_line(undef);
-                ModPerl::Util::exit 0;
-            }
+        unless( $I->headers_sent ) {
+            $I->status($status);
+            $I->status_line(undef);
         }
 
         ModPerl::Util::exit 0;
     }
 
+    my $proxy_loaded;
     sub fetch_url {
         my ($I, $url)=@_;
 
         my $output=[];
-        my $proxy;
-        my $subr=$I->lookup_uri(($proxy=$url=~m!^https?://!) ? '/' : $url);
-        if( $subr->status==Apache2::Const::HTTP_OK ) {
+        my $proxy=$url=~m!^\w+?://!;
+        my $subr;
+        if( $proxy ) {
+            $proxy_loaded=Apache2::Module::loaded('mod_proxy.c');
+            return unless $proxy_loaded;
+            $subr=$I->lookup_uri('/');
+        } else {
+            $subr=$I->lookup_uri($url);
+        }
+        if( $subr->status==Apache2::Const::HTTP_OK and
+            (length($subr->handler) ||
+             $subr->finfo->filetype==APR::Const::FILETYPE_REG) ) {
             @{$subr->pnotes}{qw/out force_fetch_content/}=($output,1);
             $subr->add_output_filter
                 (\&ModPerl2::Tools::Filter::fetch_content_filter);
@@ -218,6 +235,16 @@ sub fetch_url {
             } else {
                 return join('', @$output);
             }
+        }
+        if( wantarray ) {
+            my (%hout);
+            $hout{STATUS}=$subr->status;
+            $hout{STATUS}=Apache2::Const::HTTP_NOT_FOUND
+                if $hout{STATUS}==Apache2::Const::HTTP_OK;
+            $subr->headers_out->do(sub {$hout{lc $_[0]}=$_[1]; 1});
+            return (undef, \%hout);
+        } else {
+            return;
         }
         return;
     }
@@ -331,7 +358,7 @@ happens if the HTTP headers are already on the wire. Then it is too late.
 The various flavors of C<safe_die()> take this into account.
 
 C<safe_die> won't return. Instead it calls
-C<ModPerl::Util::exit(0)|ModPerl::Util/"exit">
+L<ModPerl::Util::exit(0)|ModPerl::Util/"exit">
 which raises an exception.
 
 =over 4
@@ -374,6 +401,14 @@ Usage from within a filter:
 The filter flavor removes the current filter from the request's output
 filter chain.
 
+=item $r-E<gt>headers_sent
+
+This function checks if the HTTP_HEADER output filter is still present.
+If so, it returns an empty list, true otherwise.
+
+The presence of this filter means no output has yet been written to the
+client. The HTTP status code and header fields can still be modified.
+
 =back
 
 =head2 Fetching the content of another document
@@ -399,8 +434,8 @@ Usage:
      $r->fetch_url('http://what.is/the/meaning/of?life=42');
 
 If C<mod_proxy> is available C<fetch_url> can use it to fetch a document
-from another web server. If C<mod_proxy> is configured to allow HTTPS even
-that should work. I haven't tried that yet. Another subtle point,
+from another web server. If C<mod_ssl> is configured to allow proxying SSL
+(see C<SSLProxyEngine>) even the C<https> scheme works. Another subtle point,
 C<ProxyErrorOverride> may affect the output in case of an error.
 
 =head3 How does it work?
