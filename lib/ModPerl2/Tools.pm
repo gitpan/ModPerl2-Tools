@@ -10,13 +10,14 @@ no warnings 'uninitialized';
 use Apache2::RequestUtil ();
 use POSIX ();
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 sub close_fd {
     my %save=(2=>1);       # keep STDERR
     undef @save{@{$_[0]}} if( @_ and ref $_[0] eq 'ARRAY' );
 
     if( $^O eq 'linux' and opendir my $d, "/proc/self/fd" ) {
+	undef $save{fileno($d)}; # avoid closing the directory handle
         while (defined(my $fd=readdir $d)) {
             next unless $fd=~/^\d+$/;
             POSIX::close $fd unless exists $save{$fd};

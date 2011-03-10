@@ -2,13 +2,12 @@
 use strict;
 use warnings FATAL => 'all';
 
-use Apache::Test qw{:withtestmore};
-use Test::More;
+use Apache::Test qw{-withtestmore};
 use Apache::TestUtil;
 use Apache::TestRequest qw{GET_BODY GET};
 
-#plan tests=>3;
-plan 'no_plan';
+plan tests=>3;
+#plan 'no_plan';
 
 Apache::TestRequest::user_agent(reset => 1,
 				requests_redirectable => 0);
