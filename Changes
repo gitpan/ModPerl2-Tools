@@ -1,3 +1,7 @@
+0.08  Mon Mar 14 20:14:39 CET 2011
+      - next try to fix the close_fd bug. fileno(DIRHANDLE) does not work
+        in Perl.
+
 0.07  Tue Mar  8 11:15:43 CET 2011
       - Bugfix: avoid closing the fd directory handle in close_fd() on Linux
       - tests now without "use Apache::Test qw/:withtestmore/"

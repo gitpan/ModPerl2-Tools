@@ -10,15 +10,21 @@ no warnings 'uninitialized';
 use Apache2::RequestUtil ();
 use POSIX ();
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 sub close_fd {
     my %save=(2=>1);       # keep STDERR
     undef @save{@{$_[0]}} if( @_ and ref $_[0] eq 'ARRAY' );
 
     if( $^O eq 'linux' and opendir my $d, "/proc/self/fd" ) {
-	undef $save{fileno($d)}; # avoid closing the directory handle
-        while (defined(my $fd=readdir $d)) {
+        # Don't try to C<while( my $fd=readdir $d )> here. For really large
+        # directories it may require several read operations on the directory.
+        # So, with the loop above there is a chance that $d is closed before
+        # it could be read completely. Unfortunately, C<fileno DIRHANDLE>
+        # is not supported by perl. Hence, the fd cannot be inserted into
+        # %save. So, we need to read the complete directory *before* closing
+        # any fds.
+        for my $fd (readdir $d) {
             next unless $fd=~/^\d+$/;
             POSIX::close $fd unless exists $save{$fd};
         }
