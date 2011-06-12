@@ -164,6 +164,20 @@ DESCRIPTION
     SSL (see "SSLProxyEngine") even the "https" scheme works. Another subtle
     point, "ProxyErrorOverride" may affect the output in case of an error.
 
+    Further, if "fetch_url" is passed a subroutine as the 2nd argument the
+    content is not accumulated in a single variable but passed brigade-wise
+    to the function:
+
+     ($content, $headers)=
+         $r->fetch_url('http://what.is/the/meaning/of?life=42', sub {
+             my ($subr, @brigade)=$_;
+             ...
+         });
+
+    The subroutine is called with the subrequest as the first parameter and
+    a list of non-empty strings. The list itself may be empty if all buckets
+    of the brigade do not contain data.
+
    How does it work?
     If the passed URL starts with "https://" or "http://" a subrequest for
     the URI "/" is initiated via "$r->lookup_uri('/')". Before the

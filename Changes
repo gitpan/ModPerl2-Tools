@@ -1,3 +1,6 @@
+0.08  Fri Jun 10 16:58:00 CEST 2011
+      - streaming interface for fetch_url()
+
 0.08  Mon Mar 14 20:14:39 CET 2011
       - next try to fix the close_fd bug. fileno(DIRHANDLE) does not work
         in Perl.

@@ -38,6 +38,7 @@
 
    sub data {
      my $n=$_[0]->args || 1;
+     $_[0]->headers_out->{'Content-Length'}=$n*80;
      while($n--) {
        $_[0]->print(("x"x79)."\n");
        $_[0]->rflush;
@@ -55,6 +56,38 @@
      local $Data::Dumper::Useqq=1;
      local $Data::Dumper::Indent=1;
      $_[0]->print(Dumper($_[0]->fetch_url($_[0]->args)));
+     return Apache2::Const::OK;
+   }
+
+   sub fetch3 {
+     my ($r)=@_;
+     my $nchunks=0;
+     my $totallen=0;
+     my $cl;
+     my $status;
+     my $data='';
+     my ($s, $hdr)=$r->fetch_url($r->args, sub {
+       my ($subr, @chunk)=@_;
+       if( $nchunks==0 ) {
+         $cl=$subr->headers_out->{'Content-Length'};
+         $status=$subr->status;
+       }
+       $nchunks+=@chunk;
+       $totallen+=length for (@chunk);
+       $data.=join '', @chunk;
+     });
+     no warnings 'uninitialized';
+     $r->print(<<"EOF");
+nchunks=$nchunks
+totallen=$totallen
+cl=$cl
+CL=$hdr->{'content-length'}
+status=$status
+s='$s'
+
+$data
+EOF
+
      return Apache2::Const::OK;
    }
 
@@ -107,6 +140,11 @@
 <Location /fetch2>
   SetHandler modperl
   PerlResponseHandler My::Test::fetch2
+</Location>
+
+<Location /fetch3>
+  SetHandler modperl
+  PerlResponseHandler My::Test::fetch3
 </Location>
 
 PerlModule ModPerl::Registry

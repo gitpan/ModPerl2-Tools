@@ -10,7 +10,7 @@ no warnings 'uninitialized';
 use Apache2::RequestUtil ();
 use POSIX ();
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 sub close_fd {
     my %save=(2=>1);       # keep STDERR
@@ -138,9 +138,9 @@ sub fetch_url {
         my $eos=0;
 
         while( my $b=$bb->first ) {
-            $eos++ if( $b->is_eos );
+            $eos++ if $b->is_eos;
             $b->read(my $bdata);
-            push @{$buffer}, $bdata if $buffer;
+            push @{$buffer}, $bdata if $buffer and length $bdata;
             $b->delete;
         }
 
@@ -159,7 +159,16 @@ sub fetch_url {
             $f->ctx(1);
         }
 
-        read_bb $bb, $f->r->pnotes->{out};
+        my $out=$f->r->pnotes->{out};
+        if( 'ARRAY' eq ref $out ) {
+            read_bb $bb, $out;
+        } elsif( 'CODE' eq ref $out ) {
+            read_bb $bb, my $buf=[];
+            $out->($f->r, @$buf);
+        } else {
+            $f->remove;
+            return Apache2::Const::DECLINED;
+        }
 
         return Apache2::Const::OK;
     }
@@ -207,16 +216,14 @@ sub fetch_url {
         ModPerl::Util::exit 0;
     }
 
-    my $proxy_loaded;
     sub fetch_url {
-        my ($I, $url)=@_;
+        my ($I, $url, $outfn)=@_;
 
         my $output=[];
         my $proxy=$url=~m!^\w+?://!;
         my $subr;
         if( $proxy ) {
-            $proxy_loaded=Apache2::Module::loaded('mod_proxy.c');
-            return unless $proxy_loaded;
+            return unless Apache2::Module::loaded('mod_proxy.c');
             $subr=$I->lookup_uri('/');
         } else {
             $subr=$I->lookup_uri($url);
@@ -224,7 +231,7 @@ sub fetch_url {
         if( $subr->status==Apache2::Const::HTTP_OK and
             (length($subr->handler) ||
              $subr->finfo->filetype==APR::Const::FILETYPE_REG) ) {
-            @{$subr->pnotes}{qw/out force_fetch_content/}=($output,1);
+            @{$subr->pnotes}{qw/out force_fetch_content/}=($outfn||$output,1);
             $subr->add_output_filter
                 (\&ModPerl2::Tools::Filter::fetch_content_filter);
             if( $proxy ) {
@@ -444,6 +451,20 @@ If C<mod_proxy> is available C<fetch_url> can use it to fetch a document
 from another web server. If C<mod_ssl> is configured to allow proxying SSL
 (see C<SSLProxyEngine>) even the C<https> scheme works. Another subtle point,
 C<ProxyErrorOverride> may affect the output in case of an error.
+
+Further, if C<fetch_url> is passed a subroutine as the 2nd argument the
+content is not accumulated in a single variable but passed brigade-wise to
+the function:
+
+ ($content, $headers)=
+     $r->fetch_url('http://what.is/the/meaning/of?life=42', sub {
+         my ($subr, @brigade)=$_;
+         ...
+     });
+
+The subroutine is called with the subrequest as the first parameter and
+a list of non-empty strings. The list itself may be empty if all buckets
+of the brigade do not contain data.
 
 =head3 How does it work?
 

@@ -10,7 +10,7 @@ use Apache::TestUtil qw/t_write_file t_client_log_error_is_expected
 use Apache::TestRequest qw{GET_BODY GET};
 
 #plan 'no_plan';
-plan tests=>17;
+plan tests=>18;
 
 Apache::TestRequest::user_agent(reset => 1,
 				requests_redirectable => 0);
@@ -73,6 +73,28 @@ XXX
     cmp_ok $VAR2->{'content-type'}, 'eq', 'image/jpeg',
            'content-type=image/jpeg';
 }
+
+$resp=GET_BODY('/fetch3?/data?10');
+ok t_cmp $resp, <<'EOF', '/fetch3?/data?10';
+nchunks=10
+totallen=800
+cl=800
+CL=800
+status=200
+s=''
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+EOF
 
 t_start_error_log_watch;
 $resp=GET_BODY('/fetch2?/does/not.exist');
