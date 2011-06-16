@@ -164,7 +164,7 @@ DESCRIPTION
     SSL (see "SSLProxyEngine") even the "https" scheme works. Another subtle
     point, "ProxyErrorOverride" may affect the output in case of an error.
 
-    Further, if "fetch_url" is passed a subroutine as the 2nd argument the
+    Further, if "fetch_url" is passed a subroutine as the last argument the
     content is not accumulated in a single variable but passed brigade-wise
     to the function:
 
@@ -177,6 +177,41 @@ DESCRIPTION
     The subroutine is called with the subrequest as the first parameter and
     a list of non-empty strings. The list itself may be empty if all buckets
     of the brigade do not contain data.
+
+    On success the resulting $content will be the empty string in this case.
+
+    "fetch_url()" normally strips almost all input HTTP header fields from
+    the subrequest before running it. However, if the $r request object has
+    a "Host" header field it is passed on. Also, a "User-Agent" header is
+    set for the subrequest containing "ModPerl2::Tools/$VERSION" where
+    $VERSION is the module's version.
+
+    If you need to pass more fields pass an array reference as the 2nd
+    parameter to "fetch_url()":
+
+     ($content, $headers)=
+         $r->fetch_url('http://what.is/the/meaning/of?life=42', [qw/
+             X-MyHeader my-value
+             X-MyNextHeader my-next-value
+         /]);
+
+    or even:
+
+     ($content, $headers)=
+         $r->fetch_url('http://what.is/the/meaning/of?life=42', [qw/
+             X-MyHeader my-value
+             X-MyNextHeader my-next-value
+         /], sub {
+             my ($subr, @brigade)=$_;
+             ...
+         });
+
+    If "Host" or "User-Agent" headers are passed this way they overwrite the
+    default ones.
+
+    Note, though, the header fields are assigned to the subrequest just
+    before the response handler is run. Earlier phases will see a copy of
+    the main request's headers.
 
    How does it work?
     If the passed URL starts with "https://" or "http://" a subrequest for

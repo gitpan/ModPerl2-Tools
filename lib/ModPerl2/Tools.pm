@@ -10,7 +10,7 @@ no warnings 'uninitialized';
 use Apache2::RequestUtil ();
 use POSIX ();
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 
 sub close_fd {
     my %save=(2=>1);       # keep STDERR
@@ -217,7 +217,11 @@ sub fetch_url {
     }
 
     sub fetch_url {
-        my ($I, $url, $outfn)=@_;
+        my ($I, $url, $headers, $outfn)=@_;
+        if( @_==3 and ref $headers eq 'CODE' ) {
+            $outfn=$headers;
+            undef $headers;
+        }
 
         my $output=[];
         my $proxy=$url=~m!^\w+?://!;
@@ -239,6 +243,16 @@ sub fetch_url {
                 $subr->filename("proxy:".$url);
                 $subr->handler('proxy_server');
             }
+            $subr->headers_in->clear;
+            if( $headers ) {
+                for( my $i=0; $i<@$headers; $i+=2 ) {
+                    $subr->headers_in->add(@{$headers}[$i, $i+1]);
+                }
+            }
+            $subr->headers_in->add('User-Agent', "ModPerl2::Tools/$VERSION")
+                unless exists $subr->headers_in->{'User-Agent'};
+            $_=$I->headers_in->{Host} and $subr->headers_in->add('Host', $_)
+                unless exists $subr->headers_in->{'Host'};
             $subr->run;
             if( wantarray ) {
                 my (%hout);
@@ -452,7 +466,7 @@ from another web server. If C<mod_ssl> is configured to allow proxying SSL
 (see C<SSLProxyEngine>) even the C<https> scheme works. Another subtle point,
 C<ProxyErrorOverride> may affect the output in case of an error.
 
-Further, if C<fetch_url> is passed a subroutine as the 2nd argument the
+Further, if C<fetch_url> is passed a subroutine as the last argument the
 content is not accumulated in a single variable but passed brigade-wise to
 the function:
 
@@ -465,6 +479,41 @@ the function:
 The subroutine is called with the subrequest as the first parameter and
 a list of non-empty strings. The list itself may be empty if all buckets
 of the brigade do not contain data.
+
+On success the resulting C<$content> will be the empty string in this case.
+
+C<fetch_url()> normally strips almost all input HTTP header fields from the
+subrequest before running it. However, if the C<$r> request object has
+a C<Host> header field it is passed on. Also, a C<User-Agent> header is
+set for the subrequest containing C<ModPerl2::Tools/$VERSION> where
+C<$VERSION> is the module's version.
+
+If you need to pass more fields pass an array reference as the
+2nd parameter to C<fetch_url()>:
+
+ ($content, $headers)=
+     $r->fetch_url('http://what.is/the/meaning/of?life=42', [qw/
+         X-MyHeader my-value
+         X-MyNextHeader my-next-value
+     /]);
+
+or even:
+
+ ($content, $headers)=
+     $r->fetch_url('http://what.is/the/meaning/of?life=42', [qw/
+         X-MyHeader my-value
+         X-MyNextHeader my-next-value
+     /], sub {
+         my ($subr, @brigade)=$_;
+         ...
+     });
+
+If C<Host> or C<User-Agent> headers are passed this way they overwrite
+the default ones.
+
+Note, though, the header fields are assigned to the subrequest just before
+the response handler is run. Earlier phases will see a copy of the main
+request's headers.
 
 =head3 How does it work?
 

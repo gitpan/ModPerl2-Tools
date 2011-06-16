@@ -10,7 +10,7 @@ use Apache::TestUtil qw/t_write_file t_client_log_error_is_expected
 use Apache::TestRequest qw{GET_BODY GET};
 
 #plan 'no_plan';
-plan tests=>18;
+plan tests=>28;
 
 Apache::TestRequest::user_agent(reset => 1,
 				requests_redirectable => 0);
@@ -56,12 +56,16 @@ ok t_cmp $resp, 80000, '/fetch1?1000';
 
 SKIP: {
     no warnings qw/uninitialized numeric/;
-    skip <<'XXX', 3 unless $ENV{TEST_PROXY};
-If you want to test URL fetching via mod_proxy set the TEST_PROXY
-environment variable to either 1 or an HTTP-URL that points to an
-image/jpeg document. If you set TEST_PROXY=1 then
+    skip <<'XXX', 3 unless $ENV{TEST_PROXY} and have_module 'mod_proxy_http.c';
+Set envvar TEST_PROXY=1 and make sure mod_proxy_http is loaded
+to perform this test. It tries to fetch
+
   http://foertsch.name/Regenbogen-ueber-Gaiberg-small.jpg
-is fetched. There is no guarantee that this URL is always available.
+
+using mod_proxy. There is no guarrantee that this URL is available at all times.
+
+Alternatively, set TEST_PROXY to an URL that is shipped with a "image/jpeg"
+content type header.
 XXX
     my $url='http://foertsch.name/Regenbogen-ueber-Gaiberg-small.jpg';
     $url=$ENV{TEST_PROXY} unless $ENV{TEST_PROXY}==1;
@@ -96,6 +100,30 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 EOF
 
+$resp=GET_BODY('/hdrs', 'X-A-Hdr'=>15);
+#diag $resp;
+like $resp, qr/(?mi)^X-A-Hdr: 15$/, 'found X-A-Hdr';
+unlike $resp, qr/(?mi)^X-MyHdr: my-hdr$/, 'no X-MyHdr';
+
+$resp=GET_BODY('/fetch4', 'X-A-Hdr'=>15);
+#diag $resp;
+like $resp, qr!(?m)^including /hdrs$!, '/hdrs included';
+unlike $resp, qr/(?mi)^X-A-Hdr: 15$/, 'X-A-Hdr has disappeared';
+like $resp, qr/(?mi)^X-MyHdr: my-hdr$/, 'found X-MyHdr';
+like $resp, qr!(?mi)^User-Agent: ModPerl2::Tools/[\d.]+$!, 'check User-Agent';
+
+SKIP: {
+    skip 'mod_proxy_http is needed to perform this test', 4
+        unless have_module 'mod_proxy_http.c';
+    $resp=GET_BODY('/fetch4?use_proxy', 'X-A-Hdr'=>15);
+    #diag $resp;
+    like $resp, qr!(?m)^including http.+/hdrs$!, '/hdrs included';
+    unlike $resp, qr/(?mi)^X-A-Hdr: 15$/, 'X-A-Hdr has disappeared';
+    like $resp, qr/(?mi)^X-MyHdr: my-hdr$/, 'found X-MyHdr';
+    like $resp, qr!(?mi)^User-Agent: ModPerl2::Tools/[\d.]+$!,
+        'check User-Agent';
+}
+
 t_start_error_log_watch;
 $resp=GET_BODY('/fetch2?/does/not.exist');
 ok !grep(/File does not exist/, t_finish_error_log_watch),
@@ -109,7 +137,7 @@ ok !grep(/File does not exist/, t_finish_error_log_watch),
 
 SKIP: {
     skip 'mod_autoindex is needed to perform this test', 1
-        unless need_module 'mod_autoindex.c';
+        unless have_module 'mod_autoindex.c';
     my $droot=Apache::Test::vars('documentroot');
     t_mkdir t_catfile $droot, 'dir';
     t_write_file t_catfile($droot, 'dir', '1.txt'), '1';

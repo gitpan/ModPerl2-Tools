@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               ModPerl2-Tools
-version:            0.09
+version:            0.10
 abstract:           a few hopefully useful tools
 author:
     - Torsten Foertsch <torsten.foertsch@gmx.net>

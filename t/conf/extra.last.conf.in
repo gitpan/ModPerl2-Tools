@@ -91,6 +91,23 @@ EOF
      return Apache2::Const::OK;
    }
 
+   sub fetch4 {
+     use Apache::TestRequest ();
+     my ($r)=@_;
+     my $url='/hdrs';
+     $url=Apache::TestRequest::resolve_url($url) if $r->args eq 'use_proxy';
+     $r->print("including $url\n");     
+     $r->fetch_url($url, [qw/X-MyHdr my-hdr/], sub {shift; $r->print(@_)});
+     return Apache2::Const::OK;
+   }
+
+   sub hdrs {
+     my ($r)=@_;
+     use APR::Table ();
+     $r->headers_in->do(sub {$r->print("$_[0]: $_[1]\n"); 1});
+     return Apache2::Const::OK;
+   }
+
    sub req_die {
      $_[0]->safe_die(410);
      my $n=10;
@@ -145,6 +162,16 @@ EOF
 <Location /fetch3>
   SetHandler modperl
   PerlResponseHandler My::Test::fetch3
+</Location>
+
+<Location /fetch4>
+  SetHandler modperl
+  PerlResponseHandler My::Test::fetch4
+</Location>
+
+<Location /hdrs>
+  SetHandler modperl
+  PerlResponseHandler My::Test::hdrs
 </Location>
 
 PerlModule ModPerl::Registry

@@ -1,4 +1,7 @@
-0.08  Fri Jun 10 16:58:00 CEST 2011
+0.10  Wed Jun 15 18:36:41 CEST 2011
+      - clear subrequest's headers_in table before running it in fetch_url
+
+0.09  Fri Jun 10 16:58:00 CEST 2011
       - streaming interface for fetch_url()
 
 0.08  Mon Mar 14 20:14:39 CET 2011
